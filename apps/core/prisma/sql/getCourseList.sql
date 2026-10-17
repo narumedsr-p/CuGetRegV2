@@ -20,6 +20,7 @@
 -- @param {Decimal} $17:credit? Optional exact credit
 -- @param {Boolean} $18:favorite? Optional when true, select user's favorite courses
 -- @param {String} $19:userId? Optional , required when get user's favorite courses
+-- @param {String} $20:qPrefix? Optional course_no prefix search (caller wraps with trailing %, e.g. 'query%')
 
 -- Perf note: LIMIT/OFFSET are applied in `ranked_courses` (Stage A, narrow),
 -- before the expensive per-class JSON aggregation in `section_json` (Stage B).
@@ -115,11 +116,11 @@ matching_sections AS (
              OR c.course_condition = ''
              OR c.course_condition = '-')
 
-        -- Text search: course_no, abbr_name, names, OR professor name
+        -- Text search: course_no (prefix match), abbr_name, names, OR professor name (substring match)
         -- (professor search is per-class; sections without classes won't match via this path)
         AND (
             $8::text IS NULL
-            OR c.course_no ILIKE $8
+            OR c.course_no ILIKE $20 || '%'
             OR ci.abbr_name ILIKE $8
             OR ci.course_name_en ILIKE $8
             OR ci.course_name_th ILIKE $8
@@ -139,27 +140,26 @@ matching_sections AS (
         )
 
         -- Cart-fit filter: exclude sections whose classes overlap with any
-        -- precomputed occupied_slots from the cart, or whose classes have no
-        -- fixed period (IA/AR/zero-duration).  $16 is the cart ID;
-        -- pass null to skip the filter entirely.
+        -- precomputed occupied_slots from the cart.  Classes with no fixed
+        -- period (IA/AR) can't conflict, so they never exclude a
+        -- section.  $16 is the cart ID; pass null to skip the filter entirely.
         --
         -- Uses a GiST expression index on int4range(period_start_minutes, period_end_minutes)
-        -- for efficient overlap (&&) lookups.  int4range returns NULL when either argument
-        -- is NULL, so classes with IA/AR/bad times naturally fail the overlap check and
-        -- are caught by the IS NULL clause below.
+        -- for efficient overlap (&&) lookups.  int4range treats a NULL bound as
+        -- unbounded (int4range(NULL, NULL) = '(,)' overlaps everything), so the
+        -- NOT NULL guards below are required.
         AND (
             $16::text IS NULL
             OR NOT EXISTS (
                 SELECT 1 FROM course_class cl_self
                 WHERE cl_self.section_id = s.id
-                  AND (
-                      cl_self.period_start_minutes IS NULL
-                      OR EXISTS (
-                          SELECT 1 FROM occupied_slots occ
-                          WHERE occ.day_of_week = cl_self.day_of_week
-                            AND int4range(cl_self.period_start_minutes, cl_self.period_end_minutes, '[)') &&
-                                int4range(occ.period_start_minutes, occ.period_end_minutes, '[)')
-                      )
+                  AND cl_self.period_start_minutes IS NOT NULL
+                  AND cl_self.period_end_minutes IS NOT NULL
+                  AND EXISTS (
+                      SELECT 1 FROM occupied_slots occ
+                      WHERE occ.day_of_week = cl_self.day_of_week
+                        AND int4range(cl_self.period_start_minutes, cl_self.period_end_minutes, '[)') &&
+                            int4range(occ.period_start_minutes, occ.period_end_minutes, '[)')
                   )
             )
         )
@@ -307,6 +307,7 @@ section_json AS (
             json_agg(
                 json_build_object(
                     'id',          cl.id,
+                    'sectionId',   cl.section_id,
                     'type',        cl.type,
                     'dayOfWeek',   cl.day_of_week,
                     'professors',  cl.professors,
@@ -359,12 +360,11 @@ SELECT
         json_agg(
             json_build_object(
                 'id',         sj.section_id,
+                'courseId',   sj.course_id,
                 'sectionNo',  sj.section_no,
                 'closed',     sj.closed,
-                'capacity',   json_build_object(
-                    'current', sj.capacity_current,
-                    'max',     sj.capacity_max
-                ),
+                'regis',      sj.capacity_current,
+                'max',        sj.capacity_max,
                 'note',       sj.note,
                 'genEdType',  sj.gen_ed_type,
                 'classes',    sj.classes
