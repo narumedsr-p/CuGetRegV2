@@ -14,10 +14,17 @@ import type {
   GetCourseQuerySchema,
   GetCourseReviewQuerySchema,
 } from "@cugetreg/zod-schemas/courses";
-import type { CourseReview } from "@cugetreg/zod-schemas/courses-response";
+import type {
+  CourseDetails,
+  CourseReview,
+  GetCourseResponse,
+} from "@cugetreg/zod-schemas/courses-response";
 
 //1.1 Query Course
-async function queryCourse(query: GetCourseQuerySchema, userId?: string) {
+async function queryCourse(
+  query: GetCourseQuerySchema,
+  userId?: string,
+): Promise<GetCourseResponse> {
   const {
     studyProgram,
     academicYear,
@@ -34,8 +41,7 @@ async function queryCourse(query: GetCourseQuerySchema, userId?: string) {
     timeStart,
     timeEnd,
     noPrereq,
-    creditMin,
-    creditMax,
+    credit,
     favorite,
     fitCartId,
   } = query;
@@ -98,10 +104,10 @@ async function queryCourse(query: GetCourseQuerySchema, userId?: string) {
       sortBy ?? null,
       sortOrder ?? "desc",
       fitCartId ?? null,
-      creditMin ?? null,
-      creditMax ?? null,
+      credit ?? null,
       favorite ?? null,
       userId ?? null,
+      q ?? null,
     ),
   );
 
@@ -115,52 +121,58 @@ async function queryCourse(query: GetCourseQuerySchema, userId?: string) {
   const reviewCounts = await prisma.review.groupBy({
     by: ["courseNo"],
     _count: { _all: true },
-    where: { courseNo: { in: courseNos } },
+    where: {
+      courseNo: { in: courseNos },
+      status: ReviewStatus.APPROVED,
+    },
   });
   const reviewCountMap = new Map(
     reviewCounts.map((r) => [r.courseNo, r._count._all]),
   );
 
-  const data = rawResults.map((row) => ({
-    course: {
-      id: row.id,
-      studyProgram: row.study_program,
-      academicYear: row.academic_year,
-      semester: row.semester,
-      courseNo: row.course_no,
-      courseCondition: row.course_condition,
-      genEdType: row.gen_ed_type,
-      midtermStart: row.midterm_start?.toISOString() ?? null,
-      midtermEnd: row.midterm_end?.toISOString() ?? null,
-      finalStart: row.final_start?.toISOString() ?? null,
-      finalEnd: row.final_end?.toISOString() ?? null,
-      isFavorite: row.is_favorite ?? false,
-      sections: (row.sections as any[]) ?? [],
-    },
-    courseInfo: {
-      abbrName: row.abbr_name,
-      courseNameEn: row.course_name_en,
-      courseNameTh: row.course_name_th,
-      courseDescEn: row.course_desc_en,
-      courseDescTh: row.course_desc_th,
-      faculty: row.faculty ?? "",
-      department: row.department ?? "",
-      credit: row.credit ?? "",
-      creditHours: row.credit_hours ?? "",
-    },
-    stats: {
-      sectionsCount: row.sections_count ?? 0,
-      capacitySum: row.capacity_sum ?? 0,
-      remainingSum: row.remaining_sum ?? 0,
-      hasSeats: (row.remaining_sum ?? 0) > 0,
-      isClosedAll:
-        (row.sections_count ?? 0) > 0 &&
-        (row.closed_sections_count ?? 0) === (row.sections_count ?? 0),
-    },
-    reviewCount: reviewCountMap.get(row.course_no) ?? 0,
-  }));
+  const data = rawResults.map(
+    (row) =>
+      ({
+        course: {
+          id: row.id,
+          studyProgram: row.study_program,
+          academicYear: row.academic_year,
+          semester: row.semester,
+          courseNo: row.course_no,
+          courseCondition: row.course_condition,
+          genEdType: row.gen_ed_type,
+          midtermStart: row.midterm_start?.toISOString() ?? null,
+          midtermEnd: row.midterm_end?.toISOString() ?? null,
+          finalStart: row.final_start?.toISOString() ?? null,
+          finalEnd: row.final_end?.toISOString() ?? null,
+          isFavorite: row.is_favorite ?? false,
+          sections: (row.sections as any[]) ?? [],
+        },
+        courseInfo: {
+          abbrName: row.abbr_name,
+          courseNameEn: row.course_name_en,
+          courseNameTh: row.course_name_th,
+          courseDescEn: row.course_desc_en,
+          courseDescTh: row.course_desc_th,
+          faculty: row.faculty,
+          department: row.department ?? "",
+          credit: row.credit ?? "",
+          creditHours: row.credit_hours ?? "",
+        },
+        stats: {
+          sectionsCount: row.sections_count ?? 0,
+          capacitySum: row.capacity_sum ?? 0,
+          remainingSum: row.remaining_sum ?? 0,
+          hasSeats: (row.remaining_sum ?? 0) > 0,
+          isClosedAll:
+            (row.sections_count ?? 0) > 0 &&
+            (row.closed_sections_count ?? 0) === (row.sections_count ?? 0),
+        },
+        reviewCount: reviewCountMap.get(row.course_no) ?? 0,
+      }) as CourseDetails,
+  );
 
-  return { data, total };
+  return { data, total } as GetCourseResponse;
 }
 
 //1.2 get user's favorite courses
@@ -372,6 +384,7 @@ async function getCourseReviewByCourseNo(
   };
   const reviewSelect = {
     id: true,
+    userId: true,
     rating: true,
     status: true,
     studyProgram: true,
@@ -492,9 +505,11 @@ async function getCourseReviewByCourseNo(
     const dislikeCount =
       reviewVotes.find((v) => v.voteType === VoteType.D)?._count._all ?? 0;
     const reaction = reactions.get(review.id);
+    // Never expose the author's userId — only whether it is the caller's own.
+    const { userId: reviewUserId, ...publicReview } = review;
 
     return {
-      ...review,
+      ...publicReview,
       user: {
         ...review.user,
         faculty: unmapFacultyCode(review.user.faculty),
@@ -503,6 +518,7 @@ async function getCourseReviewByCourseNo(
         likeCount,
         dislikeCount,
       },
+      isOwner: userId !== undefined && reviewUserId === userId,
       ...(reaction && { reaction }),
     } as CourseReview;
   });

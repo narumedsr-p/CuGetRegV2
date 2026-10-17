@@ -43,9 +43,11 @@
   import * as Accordion from '@cugetreg/ui/atoms/accordion';
   import { Button } from '@cugetreg/ui/atoms/button';
   import { GenedChip } from '@cugetreg/ui/atoms/gened-chip';
+  import { Modal } from '@cugetreg/ui/atoms/modal';
   import { StudyProgramChip } from '@cugetreg/ui/atoms/studyprogram-chip';
   import { YearSemesterChip } from '@cugetreg/ui/atoms/yearsemester-chip';
   import { Comment } from '@cugetreg/ui/molecules/comment';
+  import { ConfirmDeleteReview } from '@cugetreg/ui/molecules/confirm-delete-review';
   import { FloatingButton } from '@cugetreg/ui/molecules/floating-button';
   import {
     type ClassInfo,
@@ -517,10 +519,19 @@
       }
     } catch (error) {
       if (isAxiosError(error)) {
-        if (error.status === 401)
+        if (error.status === 401) {
           toast.error('Please login before doing this action', {
             position: 'bottom-right',
           });
+        } else if (error.status === 409) {
+          toast.error('ไม่สามารถ Like/Dislike รีวิวที่ยังไม่ถูกอนุมัติ', {
+            position: 'bottom-right',
+          });
+        } else {
+          toast.error('Something went wrong', {
+            position: 'bottom-right',
+          });
+        }
         return;
       }
       console.error(error);
@@ -530,6 +541,12 @@
     } finally {
       pendingReviewVotes = pendingReviewVotes.filter((id) => id !== reviewId);
     }
+  }
+
+  function isCourseNotOpenError(error: unknown) {
+    return (
+      isAxiosError(error) && error.response?.data?.error === 'COURSE_NOT_FOUND'
+    );
   }
 
   async function handleSubmitReview() {
@@ -554,6 +571,12 @@
         reviewContent = '';
         reviewRating = 1;
       } catch (error) {
+        if (isCourseNotOpenError(error)) {
+          toast.error('โปรดเลือกเทอมที่เปิดสอน', {
+            position: 'bottom-right',
+          });
+          return;
+        }
         console.error(error);
         toast.error('Something went wrong', {
           position: 'bottom-right',
@@ -581,6 +604,7 @@
       SubmitReviewResponseSchema.parse(response.data);
       await refreshReviews({ includeFacets: true, targetPage: 1 });
       reviewContent = '';
+      toast.success('ส่งรีวิวสำเร็จ', { position: 'bottom-right' });
     } catch (error) {
       if (isAxiosError(error)) {
         if (error.status === 401) {
@@ -589,6 +613,18 @@
           });
           return;
         }
+        if (error.status === 409) {
+          toast.error('คุณรีวิววิชานี้ไปแล้ว', {
+            position: 'bottom-right',
+          });
+          return;
+        }
+      }
+      if (isCourseNotOpenError(error)) {
+        toast.error('โปรดเลือกเทอมที่เปิดสอน', {
+          position: 'bottom-right',
+        });
+        return;
       }
 
       toast.error('Something went wrong', {
@@ -599,19 +635,38 @@
     }
   }
 
-  async function handleDeleteReview(reviewId: string) {
-    const isConfirm = confirm('Confirm Delete?');
-    if (!isConfirm) return;
+  let editingReviewId = $state<string | null>(null);
+  let deletingReviewId = $state<string | null>(null);
+  let reviewDeleting = $state(false);
+
+  function requestDeleteReview(reviewId: string) {
+    deletingReviewId = reviewId;
+  }
+
+  async function confirmDeleteReview() {
+    const reviewId = deletingReviewId;
+    if (!reviewId || reviewDeleting) return;
+    reviewDeleting = true;
+
     try {
       await api.delete(`/reviews/${reviewId}`);
+      // The deleted review may have been the one loaded into the write-review
+      // form, so drop the edit target along with it.
+      if (editingReviewId === reviewId) {
+        editingReviewId = null;
+        reviewContent = '';
+        reviewRating = 1;
+      }
+      deletingReviewId = null;
       await refreshReviews({ includeFacets: true });
       toast.success('ลบรีวิวสำเร็จ', { position: 'bottom-right' });
     } catch (error) {
       console.error(error);
+      toast.error('ไม่สามารถลบรีวิวได้', { position: 'bottom-right' });
+    } finally {
+      reviewDeleting = false;
     }
   }
-
-  let editingReviewId = $state<string | null>(null);
 
   function handleEditReview(review: any) {
     reviewRating = review.rating / 2;
@@ -805,7 +860,7 @@
           </div>
         </Sidebar.MenuItem>
         <Sidebar.MenuItem>
-          <div class="mt-[0px]">
+          <div class="mt-[-8px]">
             <Sidebar.MenuButton
               onclick={() => {
                 activePanel = 'description_only';
@@ -821,7 +876,7 @@
           </div>
         </Sidebar.MenuItem>
         <Sidebar.MenuItem>
-          <div class="mt-[-12px]">
+          <div class="mt-[-20px]">
             <Sidebar.MenuButton
               onclick={() => {
                 activePanel = 'detail_only';
@@ -837,7 +892,7 @@
           </div>
         </Sidebar.MenuItem>
         <Sidebar.MenuItem>
-          <div class="mt-[-12px]">
+          <div class="mt-[-15px]">
             <Sidebar.MenuButton
               onclick={() => {
                 activePanel = 'review_only';
@@ -896,7 +951,7 @@
           <div class="text-on-surface mb-6 flex flex-col">
             <button
               type="button"
-              class="hover:text-primary w-full border-b border-neutral-200 py-4 text-left text-xl font-semibold transition-colors"
+              class="hover:text-primary w-full border-b border-neutral-200 py-4 text-left text-lg/[20px] font-medium transition-colors"
               onclick={() => {
                 activePanel = 'description_only';
                 scrollToSection(descriptionSection);
@@ -907,7 +962,7 @@
 
             <button
               type="button"
-              class="hover:text-primary w-full border-b border-neutral-200 py-4 text-left text-xl font-semibold transition-colors"
+              class="hover:text-primary w-full border-b border-neutral-200 py-4 text-left text-lg/[20px] font-medium transition-colors"
               onclick={() => {
                 activePanel = 'detail_only';
                 scrollToSection(detailSection);
@@ -921,7 +976,7 @@
             >
               <button
                 type="button"
-                class="hover:text-primary text-left text-xl font-semibold transition-colors"
+                class="hover:text-primary text-left text-lg/[20px] font-medium transition-colors"
                 onclick={() => {
                   activePanel = 'review_only';
                   scrollToSection(reviewSection);
@@ -1037,8 +1092,9 @@
             >
               <AlertTriangle size={16} class="mt-0.5 text-amber-900" />
               <span class="font-sans text-neutral-900">
-                ข้อมูลคำอธิบายรายวิชาที่แสดงไม่ได้เป็นข้อมูลล่าสุด
-                อาจมีการเปลี่ยนแปลงได้ โปรดตรวจสอบกับรายวิชาที่จัดอีกครั้ง
+                ข้อมูลอาจมีการเปลี่ยนแปลง และยังไม่เชื่อมต่อกับ CU Get Reg
+                เวอร์ชั่นก่อนหน้า
+                โปรดตรวจสอบข้อมูลกับสำนักทะเบียนทุกครั้งก่อนลงทะเบียนเรียน
               </span>
             </div>
           </section>
@@ -1417,6 +1473,27 @@
             </Accordion.Root>
           </section>
 
+          <Modal
+            exitOnEsc
+            exitOnBackgroundClick
+            centered
+            dim
+            bind:show={
+              () => deletingReviewId !== null,
+              (show) => {
+                if (!show && !reviewDeleting) deletingReviewId = null;
+              }
+            }
+          >
+            <ConfirmDeleteReview
+              loading={reviewDeleting}
+              onCancel={() => {
+                if (!reviewDeleting) deletingReviewId = null;
+              }}
+              onConfirm={confirmDeleteReview}
+            />
+          </Modal>
+
           {#if showMismatchPopup}
             <ScheduleMismatchPopup
               schedules={$userCart.cartList ?? []}
@@ -1728,12 +1805,13 @@
                     likesCount={review.stats.likeCount}
                     dislikesCount={review.stats.dislikeCount}
                     status={review.status}
+                    isOwner={review.isOwner}
                     facultyMajor={affiliation || undefined}
                     onLike={() => handleReactReview(review.id, 'L')}
                     onDislike={() => handleReactReview(review.id, 'D')}
                     reaction={review.reaction}
                     onEdit={() => handleEditReview(review)}
-                    onDelete={() => handleDeleteReview(review.id)}
+                    onDelete={() => requestDeleteReview(review.id)}
                   />
                 {/each}
               </div>

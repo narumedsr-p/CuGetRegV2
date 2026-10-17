@@ -79,8 +79,16 @@ export const CourseDetailsSchema = z.object({
   course: CourseSchema,
   courseInfo: CourseInfoSchema,
   stats: StatsSchema,
-  fitMySchedule: z.boolean(),
+  reviewCount: z.number().int().nonnegative(),
 });
+
+export const GetCourseResponseSchema = z.object({
+  data: z.array(CourseDetailsSchema),
+  total: z.number().int().nonnegative(),
+});
+
+export type CourseDetails = z.infer<typeof CourseDetailsSchema>;
+export type GetCourseResponse = z.infer<typeof GetCourseResponseSchema>;
 
 export const CourseReview = z.object({
   id: z.string(),
@@ -100,6 +108,9 @@ export const CourseReview = z.object({
     department: z.string().nullable(),
   }),
   reaction: vote.optional(),
+  // True when the review belongs to the caller, so the client can offer
+  // edit/delete on it regardless of the review's moderation status.
+  isOwner: z.boolean().default(false),
 });
 
 export const CourseNoDetailSchema = CourseSchema.extend({

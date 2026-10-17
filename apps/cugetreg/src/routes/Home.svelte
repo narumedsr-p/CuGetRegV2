@@ -8,14 +8,10 @@
   import ScheduleMismatchPopup from '$lib/components/schedule-mismatch-popup.svelte';
   import SelectedCourse from '$lib/components/selected-course.svelte';
   import { CourseResults } from '$lib/home/course-results.svelte';
+  import type { HomeCourse } from '$lib/home/home-course';
   import { createHomeUrlSync } from '$lib/home/home-url-sync.svelte';
   import { infiniteScroll } from '$lib/home/infinite-scroll';
-  import {
-    normalizeDayMapper,
-    normalizeGenedMapper,
-    sortByMapper,
-    studyProgramMapper,
-  } from '$lib/mapper';
+  import { sortByMapper, studyProgramMapper } from '$lib/mapper';
   import {
     getSemesterDisplayOptions,
     SEMESTER_LABEL_LONG,
@@ -56,7 +52,6 @@
   import { Filter as FilterBar } from '@cugetreg/ui/organisms/filter-bar';
   import { Footer } from '@cugetreg/ui/organisms/footer';
   import * as Sidebar from '@cugetreg/ui/organisms/sidebar';
-  import type { Day } from '@cugetreg/utils/types';
   import {
     type Semester,
     type SortBy,
@@ -91,6 +86,7 @@
   let selectedFaculties = $state<string[]>([]);
   let selectedDays = $state<string[]>([]);
   let selectedEval = $state<string[]>([]);
+  let credit = $state('');
   let startTime = $state('');
   let endTime = $state('');
   let fitSchedule = $state(false);
@@ -108,6 +104,7 @@
       selectedFaculties,
       selectedDays,
       selectedEval,
+      credit,
       startTime,
       endTime,
       fitSchedule,
@@ -122,6 +119,7 @@
       selectedFaculties = state.selectedFaculties;
       selectedDays = state.selectedDays;
       selectedEval = state.selectedEval;
+      credit = state.credit;
       startTime = state.startTime;
       endTime = state.endTime;
       fitSchedule = state.fitSchedule;
@@ -189,45 +187,6 @@
     },
   ];
 
-  function mapCourse(item: any) {
-    const { course: c, courseInfo: ci, reviewCount } = item;
-
-    const totalMaxSeat = item.stats?.capacitySum || 0;
-    const totalCurrentSeat =
-      (item.stats?.capacitySum || 0) - (item.stats?.remainingSum || 0);
-
-    const allDays = (c.sections ?? []).flatMap((s: any) =>
-      (s.classes ?? []).map((cl: any) => cl.dayOfWeek),
-    );
-
-    const validDays = Array.from(
-      new Set(
-        allDays
-          .map(normalizeDayMapper)
-          .filter((d: Day | undefined): d is Day => Boolean(d)),
-      ),
-    );
-
-    return {
-      recommended: false,
-      course: {
-        ...c,
-        courseInfo: ci,
-        code: c.courseNo,
-        name: ci.abbrName || ci.courseNameEn || ci.courseNameTh || '-',
-        credit: Number(ci.credit) || 0,
-        maxseat: totalMaxSeat,
-        seat: totalCurrentSeat,
-        gened: normalizeGenedMapper(c.genEdType),
-        review: reviewCount || 0,
-        rating: item.rating || 0,
-        days: validDays,
-        gradingType: ci.gradingType,
-        isFavorite: c.isFavorite ?? false,
-      },
-    };
-  }
-
   async function fetchLastUpdated(
     studyProgramParam: StudyProgram,
     academicYear: number,
@@ -254,10 +213,7 @@
     lastUpdatedLabel = `วันที่ ${dd}/${mm}/${buddhistYear}  เวลา ${hh}.${min} น.`;
   }
 
-  const courseResults = new CourseResults({
-    mapCourse,
-    getKey: (item) => item.course.code,
-  });
+  const courseResults = new CourseResults();
   const courses = $derived(courseResults.courses);
   const isLoading = $derived(courseResults.isLoading);
   const hasMore = $derived(courseResults.hasMore);
@@ -282,6 +238,7 @@
       faculties: [...selectedFaculties],
       days: [...selectedDays],
       assessment: selectedEval[0],
+      credit: credit || undefined,
       timeStart: startTime || undefined,
       timeEnd: endTime || undefined,
       fitCartId,
@@ -315,7 +272,7 @@
     );
   }
 
-  async function handleToggleFavorite(courseItem: any) {
+  async function handleToggleFavorite(courseItem: HomeCourse) {
     if (!$session.data) {
       loginPopupState.show = true;
       return;
@@ -396,7 +353,13 @@
     return isYearMismatch || isSemesterMismatch || isProgramMismatch;
   }
 
-  function handleToggleCourse(courseItem: any) {
+  const isTermMismatch = $derived(
+    !!$userCart.currentCart &&
+      (String($userCart.currentCart.academicYear) !== String(currentAY) ||
+        $userCart.currentCart.semester !== currentSemester),
+  );
+
+  function handleToggleCourse(courseItem: HomeCourse) {
     if (!$session.data) {
       loginPopupState.show = true;
       return;
@@ -417,7 +380,7 @@
         };
       } else {
         const firstAvailableSection =
-          sections.find((sec: any) => !sec.closed) || sections[0];
+          sections.find((section) => !section.closed) || sections[0];
         if (firstAvailableSection) {
           pendingCourse = {
             courseNo: code,
@@ -435,7 +398,7 @@
         return;
       }
       const firstAvailableSection =
-        sections.find((sec: any) => !sec.closed) || sections[0];
+        sections.find((section) => !section.closed) || sections[0];
       if (firstAvailableSection) {
         addCourse(code, firstAvailableSection.sectionNo);
       }
@@ -445,7 +408,7 @@
     }
   }
 
-  function handleSelectSection(courseItem: any, sectionNo: string) {
+  function handleSelectSection(courseItem: HomeCourse, sectionNo: string) {
     const { code } = courseItem.course;
     localSelectedSections[code] = Number(sectionNo);
 
@@ -494,10 +457,10 @@
     }
   }
 
-  function getSectionOptions(courseItem: any) {
-    return (courseItem.course.sections ?? []).map((sec: any) => ({
-      value: String(sec.sectionNo),
-      label: `เซค ${sec.sectionNo}`,
+  function getSectionOptions(courseItem: HomeCourse) {
+    return courseItem.course.sections.map((section) => ({
+      value: String(section.sectionNo),
+      label: `เซค ${section.sectionNo}`,
     }));
   }
 
@@ -535,7 +498,7 @@
           opened or closed. Tune the three values if the headers change height.
         -->
         <Sidebar.MenuItem>
-          <div class="-mt-[5px]">
+          <div class="-mt-[0px]">
             <Sidebar.MenuButton
               onclick={toggleSidebar}
               isActive={sidebarExpanded && activePanel === 'sidebar'}
@@ -548,7 +511,7 @@
           </div>
         </Sidebar.MenuItem>
         <Sidebar.MenuItem>
-          <div class="mt-[5px]">
+          <div class="mt-[18px]">
             <Sidebar.MenuButton
               onclick={focusFilter}
               isActive={activePanel === 'filter_only'}
@@ -581,14 +544,14 @@
           <div class="relative mb-6 flex flex-col gap-2">
             {#await cartPromise}
               <div
-                class="flex items-center justify-center gap-2 border-b border-neutral-100 px-2 py-8 text-gray-400"
+                class="flex items-center justify-center gap-2 px-2 py-8 text-gray-400"
               >
                 <Loader2 class="animate-spin" size={24} />
                 <span class="text-sm">กำลังโหลดตารางเรียน...</span>
               </div>
             {:then}
               <SelectTimetable
-                class="border-b border-neutral-100 px-2 py-5"
+                class="px-2 pt-5"
                 options={$userCart.cartList?.map((item) => ({
                   name: item.name,
                   id: item.id,
@@ -603,7 +566,7 @@
               />
             {:catch}
               <div
-                class="flex items-center justify-center gap-2 border-b border-neutral-100 px-2 py-8 text-sm text-red-400"
+                class="flex items-center justify-center gap-2 px-2 py-8 text-sm text-red-400"
               >
                 โหลดตารางเรียนไม่สำเร็จ
               </div>
@@ -820,8 +783,11 @@
             />
             <div>
               <p class="font-sans text-[10px] text-[#353745]">
-                ข้อมูลอาจมีการเปลี่ยนแปลง<br />
-                โปรดตรวจสอบข้อมูลกับสำนักทะเบียนทุกครั้งก่อนลงทะเบียนเรียน<br />
+                ข้อมูลอาจมีการเปลี่ยนแปลง และยังไม่เชื่อมต่อกับ CU Get Reg
+                เวอร์ชั่นก่อนหน้า<br />
+                โปรดตรวจสอบข้อมูลกับสำนักทะเบียนทุกครั้งก่อนลงทะเบียนเรียน
+                <br />
+
                 {#if lastUpdatedLabel}
                   Update ข้อมูลล่าสุด&nbsp;&nbsp;{lastUpdatedLabel}
                 {/if}
@@ -839,10 +805,12 @@
                 strokeWidth={2}
                 class="text-warning-hover shrink-0"
               />
-              <span
-                >ข้อมูลอาจมีการเปลี่ยนแปลง
-                โปรดตรวจสอบข้อมูลกับสำนักทะเบียนทุกครั้งก่อนลงทะเบียนเรียน</span
-              >
+              <span>
+                ข้อมูลอาจมีการเปลี่ยนแปลง และยังไม่เชื่อมต่อกับ CU Get Reg
+                เวอร์ชั่นก่อนหน้า<br />
+                โปรดตรวจสอบข้อมูลกับสำนักทะเบียนทุกครั้งก่อนลงทะเบียนเรียน
+                <br />
+              </span>
             </div>
             {#if lastUpdatedLabel}
               <span class="shrink-0 whitespace-nowrap">
@@ -882,9 +850,11 @@
                 <CourseCard
                   course={item.course}
                   recommended={item.recommended}
-                  selected={$userCart.currentCart?.items.some(
-                    (v) => v.courseNo === item.course.code,
-                  ) ?? false}
+                  selected={!isTermMismatch &&
+                    ($userCart.currentCart?.items.some(
+                      (v) => v.courseNo === item.course.code,
+                    ) ??
+                      false)}
                   onSelect={() => handleToggleCourse(item)}
                   sections={getSectionOptions(item)}
                   selectedSection={getSelectedSection(item.course.code)}
@@ -893,6 +863,7 @@
                   onToggleFavorite={() => handleToggleFavorite(item)}
                   class="w-full max-w-full md:w-full"
                   courseUrl={`/course-page/${item.course.code}?${params.toString()}`}
+                  closed={item.course.closed}
                 />
               {/each}
 
@@ -998,6 +969,7 @@
             bind:selectedFaculties
             bind:selectedDays
             bind:selectedEval
+            bind:credit
             bind:startTime
             bind:endTime
             bind:fitSchedule

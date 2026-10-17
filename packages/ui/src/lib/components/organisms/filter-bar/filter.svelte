@@ -15,7 +15,8 @@
 		{ id: 'HU', label: 'มนุษย์', color: '#C7117F', bg: '#FFFFFF' },
 		{ id: 'SO', label: 'สังคม', color: '#4B991C', bg: '#FFFFFF' },
 		{ id: 'IN', label: 'สหฯ', color: '#681A83', bg: '#FFFFFF' },
-		{ id: 'GENED', label: 'ศึกษาทั่วไป', color: '#45485F', bg: '#FFFFFF' }
+		{ id: 'GENED', label: 'ศึกษาทั่วไป', color: '#45485F', bg: '#FFFFFF' },
+		{ id: 'NO', label: 'ไม่ใช่ GenEd', color: '#000000', bg: '#FFFFFF' }
 	];
 
 	const facultyOptions = Object.keys(FACULTIES).map((faculty) => {
@@ -51,6 +52,7 @@
 		selectedFaculties?: string[];
 		selectedDays?: string[];
 		selectedEval?: string[];
+		credit?: string;
 		startTime?: string;
 		endTime?: string;
 		fitSchedule?: boolean;
@@ -64,6 +66,7 @@
 		selectedFaculties = $bindable([]),
 		selectedDays = $bindable([]),
 		selectedEval = $bindable([]),
+		credit = $bindable(''),
 		startTime = $bindable(''),
 		endTime = $bindable(''),
 		fitSchedule = $bindable(false),
@@ -82,6 +85,9 @@
 	}
 	function onFitScheduleChange() {
 		if (fitSchedule) showFitModal = true;
+	}
+	function onCreditInput() {
+		if (credit) noConditions = false;
 	}
 
 	// --- 3. HELPER LOGIC ($derived) ---
@@ -165,7 +171,7 @@
 					</Select.Trigger>
 				</div>
 				<Select.Content
-					class="border-surface-container bg-surface max-h-[200px] rounded-lg border shadow-[0_4px_15px_rgba(0,0,0,0.1)]"
+					class="border-surface-container bg-surface z-[110] max-h-[200px] rounded-lg border shadow-[0_4px_15px_rgba(0,0,0,0.1)]"
 					role="listbox"
 				>
 					<Select.Group>
@@ -221,7 +227,7 @@
 					</Select.Trigger>
 				</div>
 				<Select.Content
-					class="border-surface-container bg-surface max-h-[200px] rounded-lg border shadow-[0_4px_15px_rgba(0,0,0,0.1)]"
+					class="border-surface-container bg-surface z-[110] max-h-[200px] rounded-lg border shadow-[0_4px_15px_rgba(0,0,0,0.1)]"
 					role="listbox"
 				>
 					<Select.Group>
@@ -278,7 +284,7 @@
 					</Select.Trigger>
 				</div>
 				<Select.Content
-					class="border-surface-container bg-surface max-h-[200px] rounded-lg border shadow-[0_4px_15px_rgba(0,0,0,0.1)]"
+					class="border-surface-container bg-surface z-[110] max-h-[200px] rounded-lg border shadow-[0_4px_15px_rgba(0,0,0,0.1)]"
 					role="listbox"
 				>
 					<Select.Group>
@@ -387,19 +393,20 @@
 		<div class="mb-4">
 			<label class="mb-2 block text-xs text-neutral-400">Fit my schedule</label>
 			<div class="flex items-center gap-2.5">
-				<label class="relative inline-block h-6 w-11">
+				<label
+					class="flex cursor-pointer items-center text-base font-normal text-neutral-700 select-none"
+				>
 					<input
 						type="checkbox"
 						bind:checked={fitSchedule}
-						onchange={onFitScheduleChange}
-						class="peer size-0 opacity-0"
+						class="peer absolute size-0 cursor-pointer opacity-0"
 					/>
 					<span
-						class="absolute inset-0 cursor-pointer rounded-[34px] bg-neutral-300 transition-colors duration-[0.4s] peer-checked:bg-neutral-400 before:absolute before:bottom-[3px] before:left-[3px] before:h-[18px] before:w-[18px] before:rounded-[50%] before:bg-white before:transition-transform before:duration-[0.4s] before:content-[''] peer-checked:before:translate-x-5"
+						class="relative mr-2.5 h-[18px] w-[18px] rounded bg-neutral-200 transition-colors duration-200 peer-checked:bg-[#4f46e5] peer-hover:bg-neutral-300 after:absolute after:top-[2px] after:left-[6px] after:hidden after:h-[9px] after:w-[4px] after:rotate-45 after:border-r-2 after:border-b-2 after:border-solid after:border-white after:content-[''] peer-checked:after:block"
 					></span>
+					<span>วิชาที่ไม่ชนตาราง</span>
 				</label>
 				<span class="flex items-center gap-1.5 text-base font-normal text-neutral-700">
-					Fit my schedule
 					<span class="inline-flex items-center">
 						<InfoCircle tooltipText="แสดงเฉพาะรายวิชาที่ไม่ชนกับตารางเรียนของคุณ" />
 					</span>
@@ -460,6 +467,22 @@
 						{/each}
 					</div>
 				{/if}
+			</div>
+		</div>
+
+		<div class="mb-4">
+			<label for="credit-filter" class="mb-1.5 block text-xs text-neutral-400">หน่วยกิต</label>
+			<div class="flex items-center gap-3">
+				<input
+					id="credit-filter"
+					type="text"
+					inputmode="decimal"
+					bind:value={credit}
+					oninput={onCreditInput}
+					placeholder="ทั้งหมด"
+					class="bg-surface-container-lowest text-on-surface box-border h-10 w-20 rounded-xl border-none p-2.5 text-base text-[14px] placeholder:text-neutral-400"
+				/>
+				<span class="text-base font-normal text-neutral-700">หน่วยกิต</span>
 			</div>
 		</div>
 	</div>
