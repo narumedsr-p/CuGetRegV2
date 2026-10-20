@@ -1,10 +1,13 @@
 import z from "zod";
 
-import { semester } from "./constants.js";
+import { semester, studyProgram } from "./constants.js";
 
 export const CreateStudyPlanBodySchema = z
   .object({
     name: z.string().nonempty(),
+    // Scopes which Course offerings and which of the user's carts this plan can draw
+    // from. Required, and immutable after creation, same as curriculumId.
+    studyProgram: studyProgram,
     // Omit to create a custom plan with no curriculum. Immutable after creation.
     curriculumId: z.string().optional(),
   })

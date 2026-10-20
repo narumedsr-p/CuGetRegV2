@@ -232,6 +232,10 @@ model StudyPlan {
 
   name String @default("แผนการเรียนของฉัน")
 
+  // Set once at creation, same as curriculumId. Scopes which Course offerings (and which
+  // of the user's carts) this plan's course picker and "add from schedule" can draw from.
+  studyProgram StudyProgram @map("study_program")
+
   curriculumId String?     @map("curriculum_id")
   curriculum   Curriculum? @relation(fields: [curriculumId], references: [id])
 

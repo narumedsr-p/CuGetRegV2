@@ -44,7 +44,8 @@ export const listStudyPlansRoute = createRoute({
 export const createStudyPlanRoute = createRoute({
   method: "post",
   path: "/",
-  summary: "4.2 Create a study plan, optionally seeded from a curriculum",
+  summary:
+    "4.2 Create a study plan for a study program, optionally seeded from a curriculum",
   request: {
     body: {
       content: { "application/json": { schema: CreateStudyPlanBodySchema } },
@@ -199,7 +200,7 @@ export const listCartCandidatesRoute = createRoute({
   method: "get",
   path: "/{planId}/cart-candidates",
   summary:
-    "4.8 List the user's schedule courses available to import for a semester",
+    "4.8 List the user's schedule courses available to import for a semester (same study program as the plan only)",
   request: {
     params: planIdParam,
     query: CartCandidatesQuerySchema,
@@ -222,7 +223,8 @@ export const listCartCandidatesRoute = createRoute({
 export const addPlanItemsFromCartRoute = createRoute({
   method: "post",
   path: "/{planId}/items/from-cart",
-  summary: "4.9 Add courses to a term from the user's real schedule",
+  summary:
+    "4.9 Add courses to a term from the user's real schedule (same study program as the plan only)",
   request: {
     params: planIdParam,
     body: {

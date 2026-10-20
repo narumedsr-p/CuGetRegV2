@@ -1,11 +1,12 @@
 import z from "zod";
 
-import { semester } from "./constants.js";
+import { semester, studyProgram } from "./constants.js";
 
 export const StudyPlanSchema = z.object({
   id: z.string(),
   userId: z.string(),
   name: z.string(),
+  studyProgram: studyProgram,
   curriculumId: z.string().nullable(),
   isDefault: z.boolean(),
   extraTerms: z.number(),

@@ -89,6 +89,7 @@ export const studyPlansService = {
         data: {
           userId,
           name: data.name,
+          studyProgram: data.studyProgram,
           curriculumId: data.curriculumId ?? null,
         },
       });
@@ -347,7 +348,7 @@ export const studyPlansService = {
 
     const cartItems = await prisma.cartItem.findMany({
       where: {
-        cart: { userId, semester },
+        cart: { userId, semester, studyProgram: plan.studyProgram },
       },
       include: { cart: true, courseInfo: true },
     });
@@ -382,12 +383,17 @@ export const studyPlansService = {
         throw new Error("CATEGORY_NOT_FOUND");
       }
 
-      // Only pull items from carts the caller actually owns, matched by semester only —
-      // the academic year of the real timetable doesn't need to match the plan's term.
+      // Only pull items from carts the caller actually owns, matched by semester and
+      // study program. The academic year of the real timetable doesn't need to match
+      // the plan's term.
       const cartItems = await tx.cartItem.findMany({
         where: {
           id: { in: data.cartItemIds },
-          cart: { userId, semester: data.semester },
+          cart: {
+            userId,
+            semester: data.semester,
+            studyProgram: plan.studyProgram,
+          },
         },
         include: { courseInfo: true },
       });
